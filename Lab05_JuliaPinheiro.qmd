@@ -1,0 +1,126 @@
+---
+title: "ME315A_Lab05"
+author: "Julia Maria Pereira Pinheiro"
+format: html
+editor: visual
+---
+
+
+```{r, include=F}
+library(readxl)
+library(ggplot2)
+library(leaflet)
+library(tidyverse)
+```
+
+## Parte 1
+
+```{r}
+
+analisa_aeronave <- function(tail_number, arquivo) {
+  
+  
+  linhas_selecionadas <- list()
+  
+  filtrar_bloco_por_aeronave <- function(bloco_atual, posicao_bloco) {
+    voos_da_aeronave_no_bloco <- bloco_atual %>%
+      filter(TAIL_NUMBER == tail_number)
+    if (nrow(voos_da_aeronave_no_bloco) > 0) {
+      indice_novo <- length(linhas_selecionadas) + 1
+      linhas_selecionadas[[indice_novo]] <<- voos_da_aeronave_no_bloco
+    }
+  }
+  
+  read_csv_chunked(
+    file      = arquivo,
+    callback  = DataFrameCallback$new(filtrar_bloco_por_aeronave),
+    chunk_size = 10000,
+    col_types  = cols(.default = "c") 
+  )
+  
+  voos_da_aeronave <- bind_rows(linhas_selecionadas)
+  
+  voos_da_aeronave <- voos_da_aeronave %>%
+    mutate(
+      YEAR                = as.integer(YEAR),
+      MONTH               = as.integer(MONTH),
+      DAY                 = as.integer(DAY),
+      SCHEDULED_DEPARTURE = as.integer(SCHEDULED_DEPARTURE),
+      DISTANCE            = as.numeric(DISTANCE),
+      AIR_TIME            = as.numeric(AIR_TIME),
+      data_do_voo = as.Date(paste(YEAR, MONTH, DAY, sep = "-"))
+    ) %>%
+    arrange(data_do_voo, SCHEDULED_DEPARTURE) %>%  
+    select(-data_do_voo)  
+  
+  airports <- read_csv(
+    file.path(dirname(arquivo), "airports.csv"),
+    col_types = cols(.default = "c")
+  ) %>%
+    mutate(
+      LATITUDE  = as.numeric(LATITUDE),
+      LONGITUDE = as.numeric(LONGITUDE)
+    )
+  
+  trajeto <- voos_da_aeronave %>%
+    left_join(
+      airports %>% select(IATA_CODE, LAT_ORIGEM = LATITUDE, LON_ORIGEM = LONGITUDE),
+      by = c("ORIGIN_AIRPORT" = "IATA_CODE")
+    ) %>%
+    left_join(
+      airports %>% select(IATA_CODE, LAT_DESTINO = LATITUDE, LON_DESTINO = LONGITUDE),
+      by = c("DESTINATION_AIRPORT" = "IATA_CODE")
+    ) %>%
+    mutate(
+      velocidade_media_mph = DISTANCE / (AIR_TIME / 60)
+    ) %>%
+    filter(!is.na(LAT_ORIGEM), !is.na(LAT_DESTINO))
+  
+  mapa_trajeto <- leaflet(trajeto) %>%
+    addTiles()
+  for (i in seq_len(nrow(trajeto))) {
+    trecho <- trajeto[i, ]
+    
+    mapa_trajeto <- mapa_trajeto %>%
+      addPolylines(
+        lng = c(trecho$LON_ORIGEM, trecho$LON_DESTINO),
+        lat = c(trecho$LAT_ORIGEM, trecho$LAT_DESTINO),
+        weight = 2,
+        color = "#B39DDB",
+        opacity = 0.7,
+        popup = paste0(
+          "Trecho: ", trecho$ORIGIN_AIRPORT, " -> ", trecho$DESTINATION_AIRPORT, "<br>",
+          "Data: ", trecho$YEAR, "-", trecho$MONTH, "-", trecho$DAY, "<br>",
+          "Velocidade média: ", round(trecho$velocidade_media_mph, 1), " mph"
+        )
+      )
+  }
+  
+  mapa_trajeto <- mapa_trajeto %>%
+    addCircleMarkers(
+      lng = trajeto$LON_ORIGEM,
+      lat = trajeto$LAT_ORIGEM,
+      radius = 4,
+      color = "#341539",
+      label = trajeto$ORIGIN_AIRPORT
+    )
+  
+  return(list(
+    tabela = voos_da_aeronave,  
+    mapa   = mapa_trajeto        
+  ))
+}
+
+```
+
+
+```{r}
+resultado <- analisa_aeronave(tail_number = "N431WN", arquivo = "dados/flights.csv")
+resultado$mapa
+```
+
+```{r}
+Sys.setenv(TZ="America/Sao_Paulo")
+Sys.time()
+```
+
