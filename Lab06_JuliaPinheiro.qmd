@@ -1,0 +1,100 @@
+---
+title: "Laboratório 6"
+format: pdf
+editor: visual
+---
+
+
+```{r}
+library(DBI)
+library(RSQLite)
+conn <- dbConnect(SQLite(), "disco.db")
+
+```
+
+3. Liste as tabelas existentes no banco de dados.
+
+```{r}
+dbListTables(conn)
+```
+
+
+4.  Identifique os nomes de todas as colunas existentes na tabela customers.
+
+```{r}
+dbListFields(conn, 'customers')
+```
+
+
+
+5.  Utilizando apenas SQLite, com o apoio do comando dbGetQuery, identifique quantos clientes estão atualmente cadastrados neste banco de dados.
+```{r}
+dbGetQuery(conn, "SELECT COUNT(*) AS total_clientes
+  FROM customers
+")
+```
+
+
+6.  Utilizando apenas SQLite, identifique o número de países diferentes em que moram os clientes encontrados acima.
+
+```{r}
+dbGetQuery(conn, "
+  SELECT COUNT(DISTINCT Country) AS total_paises
+  FROM customers
+")
+```
+7. Utilizando apenas SQLite, quantos clientes existem por país? A tabela resultante deve conter o nome do país e a respectiva contagem, além de ser ordenada de maneira decrescente pela referida contagem.
+
+
+```{r}
+dbGetQuery(conn, "
+  SELECT Country, COUNT(*) AS total_clientes
+  FROM customers
+  GROUP BY Country
+  ORDER BY total_clientes DESC
+")
+```
+8.  Quais são os 5 países com mais clientes registrados? Use apenas SQLite
+
+```{r}
+dbGetQuery(conn, "
+  SELECT Country, COUNT(*) AS total_clientes
+  FROM customers
+  GROUP BY Country
+  ORDER BY total_clientes DESC
+  LIMIT 5
+")
+```
+
+9.  Quais são os países registrados que possuem apenas 6 letras no nome?
+
+```{r}
+dbGetQuery(conn, "
+  SELECT DISTINCT Country
+  FROM customers
+  WHERE Country LIKE '______'
+")
+```
+10. Quais foram as músicas compradas por clientes brasileiros?
+```{r}
+dbGetQuery(conn, "
+  SELECT DISTINCT tracks.Name AS musica
+  FROM tracks
+  INNER JOIN invoice_items
+    ON tracks.TrackId = invoice_items.TrackId
+  INNER JOIN invoices
+    ON invoice_items.InvoiceId = invoices.InvoiceId
+  INNER JOIN customers
+    ON invoices.CustomerId = customers.CustomerId
+  WHERE customers.Country = 'Brazil'
+  ORDER BY musica
+")
+```
+```{r}
+dbDisconnect(conn)
+```
+```{r}
+Sys.setenv(TZ = "America/Sao_Paulo")
+Sys.time()
+```
+
