@@ -1,0 +1,98 @@
+---
+title: "Laboratório 7"
+author: "Julia Maria Pereira Pinheiro"
+format: pdf
+editor: visual
+---
+
+
+```{r}
+library(DBI)
+library(RSQLite)
+conn <- dbConnect(SQLite(), "database.sqlite3")
+```
+
+```{r}
+dbListTables(conn)
+```
+
+2. Quem são e quantos são os professores que lecionaram disciplinas cujo tópico era estatística (subjects.abbreviation='STAT');
+```{r}
+professores_stat <- dbGetQuery(conn, "
+  SELECT DISTINCT 
+  i.name as nome_professor,
+  i.id as id_professor
+  FROM instructors as i
+  INNER JOIN teachings as t ON i.id = t.instructor_id
+  INNER JOIN sections as s ON t.section_uuid = s.uuid
+  INNER JOIN subject_memberships as sm ON s.course_offering_uuid = sm.course_offering_uuid
+  INNER JOIN (select * from subjects where subjects.abbreviation='STAT' ) as sub ON sm.subject_code = sub.code")
+str(professores_stat)
+nrow(professores_stat)
+```
+3.  O GPA americano é definido numa escala de 0 a 4, em que A = 4, AB = 3.5, B = 3, BC = 2.5, C = 2, D = 1 e F = 0. Determinando a nota média de cada oferecimento pela ponderação da quantidade de alunos em cada extrato com os valores numéricos de cada conceito, indique (no que se referente a disciplinas no assunto de estatística):
+
+- Quem é o professor mais difícil?
+- Quem é o professor mais fácil?
+```{r}
+todos_professores <- dbGetQuery(conn, "SELECT 
+    i.id AS instructor_id,
+    i.name AS instructor_name,
+    SUM(gd.a_count + gd.ab_count + gd.b_count + gd.bc_count + 
+        gd.c_count + gd.d_count + gd.f_count) AS total_alunos,
+    SUM(gd.a_count * 4.0 + gd.ab_count * 3.5 + gd.b_count * 3.0 + 
+        gd.bc_count * 2.5 + gd.c_count * 2.0 + gd.d_count * 1.0 + gd.f_count * 0.0) / 
+    NULLIF(SUM(gd.a_count + gd.ab_count + gd.b_count + gd.bc_count + 
+                gd.c_count + gd.d_count + gd.f_count), 0) AS gpa_medio
+FROM instructors i
+INNER JOIN teachings t ON i.id = t.instructor_id
+INNER JOIN sections s ON t.section_uuid = s.uuid
+INNER JOIN grade_distributions gd ON s.course_offering_uuid = gd.course_offering_uuid 
+                                AND s.number = gd.section_number
+GROUP BY i.id, i.name
+HAVING SUM(gd.a_count + gd.ab_count + gd.b_count + gd.bc_count + gd.c_count + gd.d_count + gd.f_count) > 0
+ORDER BY gpa_medio ASC")
+str(todos_professores)
+```
+
+
+```{r}
+head(todos_professores, 1)
+tail(todos_professores, 1)
+```
+
+- Qual é a disciplina mais difícil?
+- Qual é a disciplina mais fácil?
+
+
+```{r}
+todos_cursos <- dbGetQuery(conn, "SELECT 
+    c.number AS codigo_disciplina,
+    c.name AS nome_disciplina,
+    SUM(gd.a_count + gd.ab_count + gd.b_count + gd.bc_count + 
+        gd.c_count + gd.d_count + gd.f_count) AS total_alunos,
+    SUM(gd.a_count * 4.0 + gd.ab_count * 3.5 + gd.b_count * 3.0 + 
+        gd.bc_count * 2.5 + gd.c_count * 2.0 + gd.d_count * 1.0 + gd.f_count * 0.0) / 
+    NULLIF(SUM(gd.a_count + gd.ab_count + gd.b_count + gd.bc_count + 
+                gd.c_count + gd.d_count + gd.f_count), 0) AS gpa_medio
+FROM courses c
+INNER JOIN course_offerings co ON c.uuid = co.course_uuid
+INNER JOIN grade_distributions gd ON co.uuid = gd.course_offering_uuid
+GROUP BY c.number, c.name
+HAVING SUM(gd.a_count + gd.ab_count + gd.b_count + gd.bc_count + gd.c_count + gd.d_count + gd.f_count) >0
+ORDER BY gpa_medio ASC")
+str(todos_cursos)
+```
+```{r}
+head(todos_cursos, 1)
+tail(todos_cursos, 1)
+```
+
+```{r}
+dbDisconnect(conn)
+```
+```{r}
+Sys.setenv(TZ = "America/Sao_Paulo")
+Sys.time()
+```
+
